@@ -151,6 +151,12 @@ curl http://127.0.0.1:8317/v1/chat/completions \
   }'
 ```
 
+### Codex CLI (Cursor preview)
+
+The opt-in Cursor agent preview (`cloaking.cursor.protocol: agent`) supports Codex CLI text-chat requests through `/v1/responses`. Configure a Codex custom provider with `base_url = "http://127.0.0.1:8317/v1"`, `wire_api = "responses"`, and a `cursor-*` model available to your account (for example, `cursor-muse-spark-1.3`). Authenticate with the proxy's API key.
+
+This is experimental text-chat compatibility, not a full coding-agent backend: tool execution/results, images, and checkpoint continuation are unsupported. Instructions and text history are supplied as a conversation task rather than native system-role semantics. See [Cursor agent preview](./CURSOR_AGENT_PREVIEW.md) for details.
+
 ### Available models
 
 `GET /v1/models` lists only models for providers you've actually logged in to. The codex list is **fetched live** from `chatgpt.com/backend-api/codex/models` (cached 5 minutes, ETag-aware) so it always matches what your account can actually serve. Cursor models are fetched from Cursor's internal AvailableModels endpoint when possible, with a small fallback list. The current ChatGPT-account-supported set at the time of writing:
