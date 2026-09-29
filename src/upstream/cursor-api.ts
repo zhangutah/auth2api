@@ -1,3 +1,13 @@
+import {
+  AGENT_PATH,
+  AGENT_VERSION,
+  AGENT_COMMIT,
+  agentInput,
+  type AgentInput,
+  selectAgentModel,
+  openCursorAgent,
+} from "./cursor-agent";
+import { release } from "node:os";
 import { gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import http2 from "node:http2";
@@ -75,7 +85,10 @@ export function __setCursorTransport(transport: CursorTransport | null): void {
 function bodyToReadableStream(
   body: ReadableStream<Uint8Array> | Uint8Array | Buffer,
 ): ReadableStream<Uint8Array> {
-  if (body && typeof (body as ReadableStream<Uint8Array>).getReader === "function") {
+  if (
+    body &&
+    typeof (body as ReadableStream<Uint8Array>).getReader === "function"
+  ) {
     return body as ReadableStream<Uint8Array>;
   }
   const bytes =
@@ -111,7 +124,8 @@ function http2Post(
     let headersResolved = false;
     let status = 0;
     const responseHeaders: Record<string, string> = {};
-    let bodyController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    let bodyController: ReadableStreamDefaultController<Uint8Array> | null =
+      null;
     let bodyClosed = false;
 
     const closeBody = (err?: Error) => {
@@ -260,7 +274,10 @@ function encodeVarintField(field: number, value: number): Uint8Array {
   return concatBytes([encodeVarint((field << 3) | 0), encodeVarint(value)]);
 }
 
-function encodeBytesField(field: number, value: Uint8Array | string): Uint8Array {
+function encodeBytesField(
+  field: number,
+  value: Uint8Array | string,
+): Uint8Array {
   const payload =
     typeof value === "string" ? new TextEncoder().encode(value) : value;
   return concatBytes([
@@ -270,7 +287,10 @@ function encodeBytesField(field: number, value: Uint8Array | string): Uint8Array
   ]);
 }
 
-function encodeField(field: number, value: string | number | Uint8Array): Uint8Array {
+function encodeField(
+  field: number,
+  value: string | number | Uint8Array,
+): Uint8Array {
   if (typeof value === "number") return encodeVarintField(field, value);
   return encodeBytesField(field, value);
 }
@@ -381,10 +401,7 @@ interface ChatMessageInput {
 
 function messagesFromBody(body: any): ChatMessageInput[] {
   const collected: ChatMessageInput[] = [];
-  const pushText = (
-    role: ChatMessageInput["role"],
-    raw: unknown,
-  ): void => {
+  const pushText = (role: ChatMessageInput["role"], raw: unknown): void => {
     if (typeof raw === "string") {
       const trimmed = raw.trim();
       if (trimmed) collected.push({ role, content: raw });
@@ -480,7 +497,10 @@ function encodeMetadata(): Uint8Array {
   // Reverse-engineered Metadata fields. Keep static so cloaking decisions stay
   // visible at a single configuration point and not rotated per request.
   return concatBytes([
-    encodeBytesField(1, process.platform === "win32" ? "windows" : process.platform),
+    encodeBytesField(
+      1,
+      process.platform === "win32" ? "windows" : process.platform,
+    ),
     encodeBytesField(2, process.arch),
     encodeBytesField(3, process.version.replace(/^v/, "")),
     encodeBytesField(4, process.execPath),
@@ -550,7 +570,10 @@ export function encodeCursorChatRequest(body: any): CursorRequestEncoding {
   const wrapped = encodeBytesField(1, request);
   return {
     bytes: connectFrame(wrapped),
-    prompt: messages.map((m) => m.content).join("\n").trim(),
+    prompt: messages
+      .map((m) => m.content)
+      .join("\n")
+      .trim(),
     conversationId,
   };
 }
@@ -572,7 +595,8 @@ function jyhEncode(bytes: Uint8Array): string {
     const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
     out += URL_SAFE_BASE64[a >> 2];
     out += URL_SAFE_BASE64[((a & 3) << 4) | (b >> 4)];
-    if (i + 1 < bytes.length) out += URL_SAFE_BASE64[((b & 15) << 2) | (c >> 6)];
+    if (i + 1 < bytes.length)
+      out += URL_SAFE_BASE64[((b & 15) << 2) | (c >> 6)];
     if (i + 2 < bytes.length) out += URL_SAFE_BASE64[c & 63];
   }
   return out;
@@ -604,7 +628,9 @@ export function __buildCursorHeaders(
   const cursor = config.cloaking.cursor || {};
   const token = account.token.accessToken;
   const machineId =
-    account.token.cursorServiceMachineId || account.accountUuid || account.deviceId;
+    account.token.cursorServiceMachineId ||
+    account.accountUuid ||
+    account.deviceId;
   const clientVersion =
     cursor["client-version"] ||
     account.token.cursorClientVersion ||
@@ -636,7 +662,9 @@ export function __buildCursorHeaders(
     "x-cursor-client-device-type": "desktop",
     "x-cursor-config-version": configVersion,
     "x-cursor-timezone":
-      cursor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      cursor.timezone ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      "UTC",
     "x-ghost-mode": cursor["ghost-mode"] || "true",
     "x-session-id": sessionId,
     "x-request-id": uuidv4(),
@@ -692,7 +720,10 @@ function parseFields(data: Uint8Array): ProtoFieldRaw[] {
   return out;
 }
 
-function getFieldBytes(fields: ProtoFieldRaw[], field: number): Uint8Array | undefined {
+function getFieldBytes(
+  fields: ProtoFieldRaw[],
+  field: number,
+): Uint8Array | undefined {
   return fields.find((f) => f.field === field && f.wireType === 2)?.bytes;
 }
 
@@ -767,7 +798,9 @@ function extractInnerText(payload: Uint8Array, depth = 0): string {
     (f) => f.field === 1 && f.wireType === 2 && f.bytes !== undefined,
   );
   if (candidate?.bytes) {
-    const text = new TextDecoder("utf-8", { fatal: false }).decode(candidate.bytes);
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(
+      candidate.bytes,
+    );
     if (isUtfPrintable(text) && !isUuidLike(text.trim())) return text;
   }
   let acc = "";
@@ -918,7 +951,10 @@ export function createCursorStreamingDecoder(): CursorStreamingDecoder {
     return { reasoningDelta: reasoningPart, textDelta: textPart };
   }
 
-  function flushReasoning(): { reasoningDelta: string; textDelta: string } | null {
+  function flushReasoning(): {
+    reasoningDelta: string;
+    textDelta: string;
+  } | null {
     if (!pendingReasoning) return null;
     const out = { reasoningDelta: pendingReasoning, textDelta: "" };
     pendingReasoning = "";
@@ -973,9 +1009,11 @@ export function createCursorStreamingDecoder(): CursorStreamingDecoder {
           if (textDelta && resolved === "none") {
             // First real text delta — commit any pending reasoning as-is.
             const flushed = flushReasoning();
-            if (flushed) reasoningDelta = flushed.reasoningDelta + reasoningDelta;
+            if (flushed)
+              reasoningDelta = flushed.reasoningDelta + reasoningDelta;
           }
-          if (textDelta || reasoningDelta) out.push({ textDelta, reasoningDelta });
+          if (textDelta || reasoningDelta)
+            out.push({ textDelta, reasoningDelta });
         } else if (type === 2 || type === 3) {
           const err = extractJsonError(payload);
           if (err) error = err;
@@ -1000,7 +1038,10 @@ interface ResponsesSseOptions {
   reasoning?: string;
 }
 
-function buildResponsesCompletedSse(model: string, opts: ResponsesSseOptions): string {
+function buildResponsesCompletedSse(
+  model: string,
+  opts: ResponsesSseOptions,
+): string {
   const id = `resp_${uuidv4().replace(/-/g, "")}`;
   const created = Math.floor(Date.now() / 1000);
   const reasoningContent =
@@ -1113,9 +1154,11 @@ async function cursorUpstreamToSse(
         yield d;
       }
     }
-    const drained = (decoder as CursorStreamingDecoder & {
-      drain(): { reasoningDelta: string };
-    }).drain();
+    const drained = (
+      decoder as CursorStreamingDecoder & {
+        drain(): { reasoningDelta: string };
+      }
+    ).drain();
     if (drained.reasoningDelta) {
       aggregatedReasoning += drained.reasoningDelta;
       yield { reasoningDelta: drained.reasoningDelta, textDelta: "" };
@@ -1140,7 +1183,7 @@ async function cursorUpstreamToSse(
   } else if (format === "openai-chat-completions") {
     generator = openaiChatCompletionsGenerator(model, deltaStream());
   } else {
-    generator = openaiResponsesGenerator(model, deltaStream());
+    generator = __openaiResponsesGenerator(model, deltaStream());
   }
   const encoder = new TextEncoder();
   const sseStream = new ReadableStream<Uint8Array>({
@@ -1183,73 +1226,154 @@ type DeltaItem =
   | { textDelta: string; reasoningDelta: string; __done?: undefined }
   | DeltaTerminator;
 
-async function* openaiResponsesGenerator(
+export async function* __openaiResponsesGenerator(
   model: string,
   src: AsyncGenerator<DeltaItem>,
 ): AsyncGenerator<string> {
   const id = `resp_${uuidv4().replace(/-/g, "")}`;
+  const messageId = `msg_${uuidv4().replace(/-/g, "")}`;
+  const reasoningId = `rs_${uuidv4().replace(/-/g, "")}`;
   const created = Math.floor(Date.now() / 1000);
-  yield `event: response.created\ndata: ${JSON.stringify({
-    type: "response.created",
-    response: { id, created_at: created, model },
-  })}\n\n`;
+  let seq = 0,
+    messageIndex = -1,
+    reasoningIndex = -1;
+  const output: any[] = [];
+  const event = (type: string, data: Record<string, unknown>) =>
+    `event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: seq++, ...data })}\n\n`;
+  const base = { id, object: "response", created_at: created, model };
+  yield event("response.created", {
+    response: { ...base, status: "in_progress", output: [] },
+  });
+  yield event("response.in_progress", {
+    response: { ...base, status: "in_progress", output: [] },
+  });
   for await (const item of src) {
     if (item.__done) {
-      if (item.error && !item.aggregatedText && !item.aggregatedReasoning) {
-        yield `event: response.failed\ndata: ${JSON.stringify({
-          type: "response.failed",
-          response: { id, error: { message: item.error } },
-        })}\n\n`;
+      if (item.error) {
+        yield event("response.failed", {
+          response: {
+            ...base,
+            status: "failed",
+            output,
+            error: { code: "upstream_error", message: item.error },
+          },
+        });
         yield "data: [DONE]\n\n";
         return;
       }
-      const reasoningOutput = item.aggregatedReasoning.trim()
-        ? [
-            {
-              type: "reasoning",
-              summary: [
-                { type: "summary_text", text: item.aggregatedReasoning },
-              ],
-            },
-          ]
-        : [];
-      const completed = {
-        id,
-        object: "response",
-        created_at: created,
-        status: "completed",
-        model,
-        output: [
-          ...reasoningOutput,
-          {
-            type: "message",
-            role: "assistant",
-            content: [{ type: "output_text", text: item.aggregatedText }],
+      if (reasoningIndex >= 0) {
+        const part = { type: "summary_text", text: item.aggregatedReasoning };
+        output[reasoningIndex].summary = [part];
+        yield event("response.reasoning_summary_text.done", {
+          item_id: reasoningId,
+          output_index: reasoningIndex,
+          summary_index: 0,
+          text: item.aggregatedReasoning,
+        });
+        yield event("response.reasoning_summary_part.done", {
+          item_id: reasoningId,
+          output_index: reasoningIndex,
+          summary_index: 0,
+          part,
+        });
+        yield event("response.output_item.done", {
+          output_index: reasoningIndex,
+          item: output[reasoningIndex],
+        });
+      }
+      if (messageIndex >= 0) {
+        const part = {
+          type: "output_text",
+          text: item.aggregatedText,
+          annotations: [],
+        };
+        output[messageIndex].status = "completed";
+        output[messageIndex].content = [part];
+        yield event("response.output_text.done", {
+          item_id: messageId,
+          output_index: messageIndex,
+          content_index: 0,
+          text: item.aggregatedText,
+        });
+        yield event("response.content_part.done", {
+          item_id: messageId,
+          output_index: messageIndex,
+          content_index: 0,
+          part,
+        });
+        yield event("response.output_item.done", {
+          output_index: messageIndex,
+          item: output[messageIndex],
+        });
+      }
+      yield event("response.completed", {
+        response: {
+          ...base,
+          status: "completed",
+          output,
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens_details: { reasoning_tokens: 0 },
           },
-        ],
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          total_tokens: 0,
-          input_tokens_details: { cached_tokens: 0 },
-          output_tokens_details: { reasoning_tokens: 0 },
         },
-      };
-      yield `event: response.completed\ndata: ${JSON.stringify({ type: "response.completed", response: completed })}\n\n`;
+      });
       yield "data: [DONE]\n\n";
       return;
     }
     if (item.reasoningDelta) {
-      yield `event: response.reasoning_summary_text.delta\ndata: ${JSON.stringify({
-        type: "response.reasoning_summary_text.delta",
+      if (reasoningIndex < 0) {
+        reasoningIndex = output.length;
+        const reasoning = { id: reasoningId, type: "reasoning", summary: [] };
+        output.push(reasoning);
+        yield event("response.output_item.added", {
+          output_index: reasoningIndex,
+          item: reasoning,
+        });
+        yield event("response.reasoning_summary_part.added", {
+          item_id: reasoningId,
+          output_index: reasoningIndex,
+          summary_index: 0,
+          part: { type: "summary_text", text: "" },
+        });
+      }
+      yield event("response.reasoning_summary_text.delta", {
+        item_id: reasoningId,
+        output_index: reasoningIndex,
+        summary_index: 0,
         delta: item.reasoningDelta,
-      })}\n\n`;
+      });
     }
     if (item.textDelta) {
-      yield `event: response.output_text.delta\ndata: ${JSON.stringify({
-        type: "response.output_text.delta",
+      if (messageIndex < 0) {
+        messageIndex = output.length;
+        const message = {
+          id: messageId,
+          type: "message",
+          status: "in_progress",
+          role: "assistant",
+          content: [],
+        };
+        output.push(message);
+        yield event("response.output_item.added", {
+          output_index: messageIndex,
+          item: message,
+        });
+        yield event("response.content_part.added", {
+          item_id: messageId,
+          output_index: messageIndex,
+          content_index: 0,
+          part: { type: "output_text", text: "", annotations: [] },
+        });
+      }
+      yield event("response.output_text.delta", {
+        item_id: messageId,
+        output_index: messageIndex,
+        content_index: 0,
         delta: item.textDelta,
-      })}\n\n`;
+      });
     }
   }
 }
@@ -1305,7 +1429,7 @@ async function* anthropicMessagesGenerator(
         yield closeBlock(textIndex);
         textOpen = false;
       }
-      if (item.error && !item.aggregatedText && !item.aggregatedReasoning) {
+      if (item.error) {
         yield sseEvent("error", {
           type: "error",
           error: { type: "upstream_error", message: item.error },
@@ -1388,7 +1512,10 @@ async function* openaiChatCompletionsGenerator(
   const created = Math.floor(Date.now() / 1000);
   const fingerprint = `fp_${uuidv4().replace(/-/g, "").slice(0, 12)}`;
 
-  const chunk = (delta: Record<string, unknown>, finishReason: string | null = null) => {
+  const chunk = (
+    delta: Record<string, unknown>,
+    finishReason: string | null = null,
+  ) => {
     const payload = {
       id,
       object: "chat.completion.chunk",
@@ -1411,7 +1538,7 @@ async function* openaiChatCompletionsGenerator(
 
   for await (const item of src) {
     if (item.__done) {
-      if (item.error && !item.aggregatedText && !item.aggregatedReasoning) {
+      if (item.error) {
         // Surface upstream errors via the OpenAI streaming-error convention:
         // emit a final chunk with finish_reason="error" so SDKs that don't
         // know about the error sentinel still terminate cleanly, then a
@@ -1564,7 +1691,96 @@ export async function callCursorResponses(
   options: CallCursorResponsesOptions,
 ): Promise<Response> {
   const { account, config } = options;
-  const body = normalizeCursorResponsesBody(options.body ?? options.request.body);
+  const body = normalizeCursorResponsesBody(
+    options.body ?? options.request.body,
+  );
+  if (config.cloaking.cursor?.protocol === "agent") {
+    let prompt: AgentInput;
+    try {
+      prompt = agentInput(body);
+    } catch (e: any) {
+      return new Response(
+        JSON.stringify({
+          error: { message: e.message, type: "invalid_request_error" },
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    const cursor = config.cloaking.cursor;
+    const agentConfig: Config = {
+      ...config,
+      cloaking: {
+        ...config.cloaking,
+        cursor: {
+          ...cursor,
+          "client-version": cursor["client-version"] || AGENT_VERSION,
+          "client-type": cursor["client-type"] || "ide",
+        },
+      },
+    };
+    const headers = __buildCursorHeaders(account, agentConfig);
+    headers["x-cursor-client-commit"] = cursor["client-commit"] || AGENT_COMMIT;
+    headers["x-cursor-client-os-version"] = release();
+    headers["x-amzn-trace-id"] = "Root=" + headers["x-request-id"];
+    headers["connect-accept-encoding"] = "gzip";
+    delete headers["Accept-Encoding"];
+    const signal = withTimeoutSignal(
+      config.timeouts["stream-messages-ms"],
+      options.signal,
+    );
+    // Use the live per-account catalogue, not a hardcoded newest-model list.
+    const catalogue = await fetch(
+      `${cursor["api-base-url"] || DEFAULT_API_BASE_URL}${MODELS_PATH}`,
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: "{}",
+        signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+      },
+    );
+    if (!catalogue.ok)
+      return new Response(await catalogue.text(), {
+        status: catalogue.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    let model;
+    try {
+      model = selectAgentModel(
+        await catalogue.json(),
+        normaliseModel(String(body.model || "cursor-default")),
+      );
+    } catch (e: any) {
+      return new Response(
+        JSON.stringify({
+          error: { message: e.message, type: "invalid_request_error" },
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    const h2 = await openCursorAgent(
+      `${cursor["agent-base-url"] || "https://agent.api5.cursor.sh"}${AGENT_PATH}`,
+      headers,
+      prompt,
+      model,
+      config.timeouts["stream-messages-ms"],
+      signal,
+    );
+    const upstream = new Response(
+      bodyToReadableStream(h2.body) as unknown as BodyInit,
+      { status: h2.status, headers: h2.headers },
+    );
+    if (!upstream.ok) return upstream;
+    return cursorUpstreamToSse(
+      upstream,
+      String(body.model),
+      options.responseFormat || "openai-responses",
+    );
+  }
+
   // Cursor's chat is reverse-engineered to live at api2.cursor.sh. We expose
   // both legacy "agent-base-url" and "api-base-url" config keys so users can
   // override the host without forcing a code change.
@@ -1649,11 +1865,15 @@ export async function listCursorModels(
       signal: AbortSignal.timeout(10_000),
     });
     if (!resp.ok) throw new Error(`status ${resp.status}`);
-    const parsed = (await resp.json()) as { models?: Array<Record<string, unknown>> };
+    const parsed = (await resp.json()) as {
+      models?: Array<Record<string, unknown>>;
+    };
     const ids = extractCursorModelIds(parsed);
     if (ids.length) return ids.map((id) => ({ id, owned_by: "cursor" }));
   } catch (err: any) {
-    console.error(`[cursor] AvailableModels failed: ${err?.message || String(err)}`);
+    console.error(
+      `[cursor] AvailableModels failed: ${err?.message || String(err)}`,
+    );
   }
   return FALLBACK_MODELS.map((id) => ({ id, owned_by: "cursor" }));
 }
@@ -1683,8 +1903,8 @@ export function extractCursorModelIds(parsed: unknown): string[] {
       typeof e.serverModelName === "string"
         ? e.serverModelName
         : typeof e.name === "string"
-        ? e.name
-        : "";
+          ? e.name
+          : "";
     const trimmed = candidate.trim();
     if (!trimmed) continue;
     // Drop placeholder enum values and obviously invalid identifiers.

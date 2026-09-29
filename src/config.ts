@@ -28,6 +28,9 @@ export interface CloakingConfig {
    * experiments only. Cursor version-gates requests, so keep these overrideable.
    */
   cursor?: {
+    /** Opt-in preview: single plain-text user message, ASK mode only. */
+    protocol?: "legacy" | "agent";
+    "client-commit"?: string;
     "client-version"?: string;
     "client-type"?: string;
     "agent-base-url"?: string;
