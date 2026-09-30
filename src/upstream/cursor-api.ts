@@ -1,4 +1,9 @@
 import {
+  CursorToolSession,
+  resumeCursorTools,
+  cursorToolScope,
+} from "./cursor-tools";
+import {
   AGENT_PATH,
   AGENT_VERSION,
   AGENT_COMMIT,
@@ -1223,7 +1228,12 @@ interface DeltaTerminator {
 }
 
 type DeltaItem =
-  | { textDelta: string; reasoningDelta: string; __done?: undefined }
+  | {
+      textDelta: string;
+      reasoningDelta: string;
+      toolCall?: any;
+      __done?: undefined;
+    }
   | DeltaTerminator;
 
 export async function* __openaiResponsesGenerator(
@@ -1322,6 +1332,36 @@ export async function* __openaiResponsesGenerator(
       });
       yield "data: [DONE]\n\n";
       return;
+    }
+    if (item.toolCall) {
+      const call = {
+        id: `fc_${uuidv4().replace(/-/g, "")}`,
+        type: "function_call",
+        status: "completed",
+        call_id: item.toolCall.call_id,
+        name: item.toolCall.name,
+        arguments: item.toolCall.arguments,
+      };
+      const index = output.length;
+      output.push(call);
+      yield event("response.output_item.added", {
+        output_index: index,
+        item: { ...call, status: "in_progress", arguments: "" },
+      });
+      yield event("response.function_call_arguments.delta", {
+        output_index: index,
+        item_id: call.id,
+        delta: call.arguments,
+      });
+      yield event("response.function_call_arguments.done", {
+        output_index: index,
+        item_id: call.id,
+        arguments: call.arguments,
+      });
+      yield event("response.output_item.done", {
+        output_index: index,
+        item: call,
+      });
     }
     if (item.reasoningDelta) {
       if (reasoningIndex < 0) {
@@ -1695,6 +1735,26 @@ export async function callCursorResponses(
     options.body ?? options.request.body,
   );
   if (config.cloaking.cursor?.protocol === "agent") {
+    const toolFormat =
+      (options.responseFormat || "openai-responses") === "openai-responses";
+    const scope = cursorToolScope(
+      options.request?.headers,
+      account,
+      String(body.model),
+    );
+    if (toolFormat) {
+      try {
+        const resumed = resumeCursorTools(body, scope, options.signal);
+        if (resumed) return resumed;
+      } catch (e: any) {
+        return new Response(
+          JSON.stringify({
+            error: { message: e.message, type: "invalid_request_error" },
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
+      }
+    }
     let prompt: AgentInput;
     try {
       prompt = agentInput(body);
@@ -1761,6 +1821,17 @@ export async function callCursorResponses(
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
+    if (toolFormat && prompt.tools.length)
+      return CursorToolSession.open(
+        `${cursor["agent-base-url"] || "https://agent.api5.cursor.sh"}${AGENT_PATH}`,
+        headers,
+        prompt,
+        model,
+        config.timeouts["stream-messages-ms"],
+        scope,
+        signal,
+        String(body.model),
+      );
     const h2 = await openCursorAgent(
       `${cursor["agent-base-url"] || "https://agent.api5.cursor.sh"}${AGENT_PATH}`,
       headers,
