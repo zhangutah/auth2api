@@ -155,7 +155,7 @@ curl http://127.0.0.1:8317/v1/chat/completions \
 
 The opt-in Cursor agent preview (`cloaking.cursor.protocol: agent`) supports Codex CLI text-chat requests through `/v1/responses`. Configure a Codex custom provider with `base_url = "http://127.0.0.1:8317/v1"`, `wire_api = "responses"`, and a `cursor-*` model available to your account (for example, `cursor-claude-opus-5-5`). Authenticate with the proxy's API key.
 
-This experimental preview also bridges Responses function calls and results to Codex-owned tools: Codex, not the proxy, executes commands under its own sandbox and approval policy. Native shell and text-file operations are translated to declared client functions. Instructions and prior text history remain a conversation task rather than native system-role semantics; images, persistent checkpoint continuation, and some native tool types are unsupported. See [Cursor agent preview](./CURSOR_AGENT_PREVIEW.md) for details.
+This experimental preview also bridges Responses function calls and results to Codex-owned tools: Codex, not the proxy, executes commands under its own sandbox and approval policy. Native shell, bounded Grep, and text-file operations are translated to declared client functions. Instructions and prior text history remain a conversation task rather than native system-role semantics; images, persistent checkpoint continuation, and some native tool types are unsupported. See [Cursor agent preview](./CURSOR_AGENT_PREVIEW.md) for details.
 
 ### Available models
 

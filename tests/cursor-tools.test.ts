@@ -1,3 +1,11 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join as joinPath } from "node:path";
+import {
+  cursorGrepCommand,
+  cursorGrepResult,
+} from "../src/upstream/cursor-grep";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http2 from "node:http2";
@@ -557,5 +565,147 @@ test("MCP declaration refresh exposes only client-defined tools and rejects unkn
         }
       },
     );
+  }
+});
+
+test("native GrepArgs uses Codex exec_command, then returns actual grouped matches", async () => {
+  const fixture = mkdtempSync(joinPath(tmpdir(), "cursor-grep-"));
+  try {
+    writeFileSync(
+      joinPath(fixture, "README.md"),
+      "# Auth2API\nTool bridge supports grep.\n",
+    );
+    let verified = false;
+    const args = join(
+      b(1, "bridge"),
+      b(2, fixture),
+      b(3, "*.md"),
+      b(4, "content"),
+    );
+    await serverTest(
+      async (url) => {
+        const first = await (
+          await CursorToolSession.open(url, {}, input(), model, 3000, scope)
+        ).text();
+        const call = calls(first)[0];
+        assert.equal(call.name, "exec_command");
+        const parameters = JSON.parse(call.arguments);
+        assert.match(parameters.cmd, /python3 -c/);
+        const run = spawnSync("/bin/sh", ["-c", parameters.cmd], {
+          cwd: fixture,
+          encoding: "utf8",
+        });
+        assert.equal(run.status, 0, run.stderr);
+        const metadata = JSON.parse(run.stdout);
+        assert.equal(metadata.records[0].line_number, 2);
+        assert.equal(metadata.records[0].content, "Tool bridge supports grep.");
+        const next = resumeCursorTools(
+          {
+            input: [
+              {
+                type: "function_call_output",
+                call_id: call.call_id,
+                output: `Process exited with code 0\nOutput:\n${run.stdout}`,
+              },
+            ],
+          },
+          scope,
+        )!;
+        assert.equal(
+          events(await next.text()).at(-1).type,
+          "response.completed",
+        );
+        assert.ok(verified);
+      },
+      (packet, stream) => {
+        const m = f(packet);
+        if (m.has(1)) stream.write(agentFrame(exec(5, args)));
+        if (m.has(2)) {
+          const e = f(m.get(2) as Buffer);
+          if (e.has(5)) {
+            const result = f(e.get(5) as Buffer);
+            const success = f(result.get(1) as Buffer);
+            const entry = f(success.get(4) as Buffer);
+            const union = f(entry.get(2) as Buffer);
+            const content = f(union.get(3) as Buffer);
+            const file = f(content.get(1) as Buffer);
+            const match = f(file.get(2) as Buffer);
+            assert.equal(match.get(1), 2);
+            assert.equal(
+              (match.get(2) as Buffer).toString(),
+              "Tool bridge supports grep.",
+            );
+            verified = true;
+            finish(stream);
+          }
+        }
+      },
+    );
+    assert.deepEqual(cursorToolSessionCounts(), { sessions: 0, pending: 0 });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test("native grep preserves client failure and count/files modes without fabricated success", async () => {
+  const args = f(join(b(1, "test"), b(2, "."), b(4, "content")));
+  const bad = f(cursorGrepResult(args, { code: 2, stdout: "invalid regex" }));
+  assert.ok(bad.has(2));
+  assert.match(
+    (f(bad.get(2) as Buffer).get(1) as Buffer).toString(),
+    /exited 2/,
+  );
+  assert.ok(f(cursorGrepResult(args, undefined)).has(2));
+  for (const mode of ["files_with_matches", "count"]) {
+    const a = f(join(b(1, "test"), b(2, "."), b(4, mode)));
+    const records =
+      mode === "count"
+        ? [{ file: "/work/a.ts", count: 2 }]
+        : [{ file: "/work/a.ts" }];
+    const metadata = {
+      pattern: "test",
+      path: ".",
+      mode,
+      workspace: "/work",
+      records,
+      total_files: 1,
+      total_matches: 2,
+      total_lines: 0,
+      truncated: false,
+      head_limit: 50,
+      offset: 0,
+    };
+    const result = f(
+      cursorGrepResult(a, { code: 0, stdout: JSON.stringify(metadata) }),
+    );
+    const success = f(result.get(1) as Buffer);
+    const entry = f(success.get(4) as Buffer);
+    const union = f(entry.get(2) as Buffer);
+    assert.ok(union.has(mode === "count" ? 1 : 2));
+  }
+  const invalid = f(
+    cursorGrepResult(args, { code: 0, stdout: "truncated output" }),
+  );
+  assert.ok(invalid.has(2));
+});
+
+test("grep command shell quotes model-controlled regex and never executes it as shell", () => {
+  const fixture = mkdtempSync(joinPath(tmpdir(), "cursor-grep-quote-"));
+  try {
+    writeFileSync(joinPath(fixture, "sample.txt"), "ordinary text\n");
+    const marker = joinPath(fixture, "injected");
+    const pattern = `'; touch '${marker}'; #`;
+    const args = f(join(b(1, pattern), b(2, fixture), b(4, "content")));
+    const run = spawnSync("/bin/sh", ["-c", cursorGrepCommand(args)], {
+      cwd: fixture,
+      encoding: "utf8",
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(existsSync(marker), false);
+    const metadata = JSON.parse(run.stdout);
+    assert.equal(metadata.pattern, pattern);
+    assert.equal(metadata.total_matches, 0);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
   }
 });

@@ -1,6 +1,6 @@
-/** Minimal, opt-in Cursor 3.22.12 ASK transport.
- * Protocol evidence: installed workbench.desktop.main.js, lines 6769/6794/6924,
- * SHA256 8009c99a930bc4ccef0042e8894a92ba933ab950f8a86fe870a82b2113d70dd6.
+/** Minimal, opt-in Cursor 3.27.14 ASK transport.
+ * Protocol evidence: installed workbench.desktop.main.js, lines 7307/7524,
+ * SHA256 5197ce48a203b89b28c2e1ec0c8eefd393ea40ecb7d37c5e33cc594629ed771b.
  * Text conversation history is supported; this is NOT an IDE tool executor.
  */
 import http2 from "node:http2";
@@ -10,8 +10,8 @@ import { gunzipSync } from "node:zlib";
 import type { Http2Result } from "./cursor-api";
 
 export const AGENT_PATH = "/agent.v1.AgentService/Run";
-export const AGENT_VERSION = "3.22.12";
-export const AGENT_COMMIT = "3a92974361033b2051526321308c2740fe5912c0";
+export const AGENT_VERSION = "3.27.14";
+export const AGENT_COMMIT = "69b724ebc67ec522c1b5d287a5025f7a7e81be90";
 export interface AgentModel {
   id: string;
   parameters: { id: string; value: string }[];

@@ -1,5 +1,5 @@
 /** Cursor agent ↔ Responses tool handoff. No shell/filesystem execution here.
- * Native wire schema: installed Cursor 3.22.12 workbench bundle, line 6769.
+ * Native wire schema: installed Cursor 3.27.14 workbench bundle, lines 7307/7524.
  * Only declared client functions can be emitted; Codex retains its sandbox and
  * approval policy. Live HTTP/2 state stays private, scoped, bounded and expiring.
  */
@@ -18,6 +18,7 @@ import {
   type AgentModel,
 } from "./cursor-agent";
 import { __openaiResponsesGenerator } from "./cursor-api";
+import { cursorGrepCommand, cursorGrepResult } from "./cursor-grep";
 const join = (...v: Buffer[]) => Buffer.concat(v);
 const buf = (
   f: Map<number, Buffer | number>,
@@ -452,7 +453,7 @@ export class CursorToolSession {
       );
       return;
     }
-    const field = [11, 14, 2, 7, 3].find((k) => buf(e, k));
+    const field = [11, 14, 2, 7, 3, 5].find((k) => buf(e, k));
     if (!field)
       throw new Error(
         "Unsupported native Cursor exec fields: " + [...e.keys()].join(","),
@@ -487,6 +488,13 @@ export class CursorToolSession {
         if (!cmd.trim()) throw new Error("Empty native shell command");
         parameters = { cmd, yield_time_ms: 1000, max_output_tokens: 10000 };
         if (str(args, 2)) parameters.workdir = str(args, 2);
+      } else if (field === 5) {
+        // Native GrepArgs must be executed by Codex's declared, sandboxed tool.
+        parameters = {
+          cmd: cursorGrepCommand(args),
+          yield_time_ms: 1000,
+          max_output_tokens: 20000,
+        };
       } else {
         const path = str(args, 1);
         if (!path) throw new Error("Missing native file path");
@@ -560,7 +568,7 @@ export class CursorToolSession {
           const parsed = parseClientExecOutput(output);
           // A running Codex process is not an exit: ask its own client to poll.
           // Never execute/poll a process on the proxy or manufacture success.
-          if (p.field === 14 || p.field === 2) {
+          if ([14, 2, 5, 7, 3].includes(p.field)) {
             const marker = /^(?:Final output:|Output:)\s*\r?\n/m.exec(output);
             const running =
               marker &&
@@ -666,6 +674,9 @@ export class CursorToolSession {
                   ),
                 ),
               );
+          } else if (p.field === 5) {
+            // Includes observed status and structured match data; failures remain errors.
+            this.sendExec(p, 5, cursorGrepResult(p.args, parsed));
           } else {
             let metadata: any;
             try {
